@@ -1,8 +1,10 @@
 #include <iostream>
-#include <vector>
 #include <algorithm>
 #include <cmath>
 #include <cassert>
+#include <fstream>
+#include <string>
+#include <string.h>
 
 //TO DO: redo all the commentaries in english
 
@@ -20,6 +22,9 @@ const double initialMass = 1;
 const double epsilon = 1;
 // sigma = 3.4 * 10^-10 м; initialMass (для аргона) = 6.63 * 10^-32 кг; epsilon (для аргона) = 1.65 * 10^-21 Дж
 // 1 sqrt(initialMass * epsilon / sigma / sigma) = 2.15 пс (единица времени в программе)
+const double sigmaReal = 3.4 * pow(10, -10);
+const double initialMassReal = 6.63 * pow(10, -23);
+const double epsilonReal = 1.65 * pow(10, -21);
 
 
 // параметры программы
@@ -115,6 +120,8 @@ Particle* createParticles(const int amountOfParticles) {
         aSpeed[2] = (-1 + (double)rand() / RAND_MAX * 2);
         particles[i] = Particle(aCoordinates, aSpeed, initialMass);
     }
+    //cout << particles[amountOfParticles-1].vx << endl;
+    //assert(sizeof(particles)/sizeof(particles[0]) == amountOfParticles);
     return particles;
 }
 
@@ -146,12 +153,55 @@ double* calculateForce(Particle P1, Particle P2, double force[3]) {
     return force;
 }
 
-void writeEnergy(double timer, Particle* particles) {
-
+double getKineticEnergy(Particle* particles) {
+    double K = 0;
+    for (int i = 0; i < amountOfParticles; i++) {
+        K += pow(particles[i].vx, 2) / 2;
+        K += pow(particles[i].vy, 2) / 2;
+        K += pow(particles[i].vz, 2) / 2;
+    }
+    return K * epsilonReal;
 }
 
-void writeSpeed(double timer, Particle* particles) {
+void checkExistence(string filepath) {
+    ifstream fin;
+    fin.open(filepath);
+    if (fin.is_open()) {
+        return;
+    }
+    else {
+        fin.close();
+        ofstream fout;
+        fout.open(filepath);
+        fout << amountOfParticles << endl;
+        fout << endl;
+        fout.close();
+    };
+}
 
+void writeEnergy(int timer, Particle* particles) {
+    if (timer % 100 != 0) { return; };
+    ofstream fout;
+    string filepath = "./saves/" + filename + "/energy.txt";
+    checkExistence(filepath);
+    fout.open(filepath, ios_base::app);
+    assert(fout.is_open());
+    double K = getKineticEnergy(particles);
+    double U = potentialEnergy / 2.0 * epsilonReal;
+    fout << timer << " " << K << " " << U << endl;
+    fout.close();
+}
+
+void writeSpeed(int timer, Particle* particles) {
+    if (timer % 100 != 0) { return; };
+    ofstream fout;
+    string filepath = "./saves/" + filename + "/speed.txt";
+    fout.open(filepath, ios_base::trunc);
+    assert(fout.is_open());
+    for (int i = 0; i < amountOfParticles; i++) {
+        fout << to_string(particles[i].vx) + " " + to_string(particles[i].vy) + " " + to_string(particles[i].vz) << endl;
+    }
+    fout.close();
 }
 
 int main()
@@ -162,6 +212,8 @@ int main()
     int timer = 0;
     while (true) {
         potentialEnergy = 0;
+        writeEnergy(timer, particles);
+        writeSpeed(timer, particles);
         for (int i = 0; i < amountOfParticles; i++) {
             for (int j = i + 1; j < amountOfParticles; j++) {
                 double dForce[3];
@@ -177,8 +229,9 @@ int main()
         for (int i = 0; i < amountOfParticles; i++) {
             particles[i].move(timeStep);
         }
-        writeEnergy(timer, particles);
-        writeSpeed(timer, particles);
+        //writeEnergy(timer, particles);
+        //writeSpeed(timer, particles);
+        return 0;
         timer++;
         cout << timer << endl;
     }
