@@ -5,6 +5,7 @@
 #include <fstream>
 #include <string>
 #include <string.h>
+#include <ctime>
 
 //TO DO: redo all the commentaries in english
 
@@ -32,17 +33,78 @@ const double timeStep = 0.001; // 2.15 фс
 const double cutOffDistance = sigma * 4;
 const double zeroPotentialEnergy = 4 * epsilon * (pow(sigma / cutOffDistance, 12) - pow(sigma / cutOffDistance, 6));
 
+// класс частиц
+class Particle {
+public:
+    double Fx, Fy, Fz;
+    double vx, vy, vz;
+    double x, y, z;
+    double xp, yp, zp;
+    double xt, yt, zt;
+    double mass;
+
+    Particle() {
+        mass = 0;
+        Fx = Fy = Fz = vx = vy = vz = x = y = z = 0;
+    }
+
+    Particle(double coordinates[3], double speed[3], double aMass, double time) {
+        x = coordinates[0];
+        y = coordinates[1];
+        z = coordinates[2];
+        vx = speed[0];
+        vy = speed[1];
+        vz = speed[2];
+        xp = coordinates[0] - vx * time;
+        yp = coordinates[1] - vy * time;
+        zp = coordinates[2] - vz * time;
+        mass = aMass;
+    }
+
+    void move(double time) {
+        xt = x;
+        yt = y;
+        zt = z;
+        x = 2 * x - xp + Fx * pow(time, 2);
+        y = 2 * y - yp + Fy * pow(time, 2);
+        z = 2 * z - zp + Fz * pow(time, 2);
+        xp = xt;
+        yp = yt;
+        zp = zt;
+        vx = (x - xp) / time;
+        vy = (y - yp) / time;
+        vz = (z - zp) / time;
+        //if (sqrt(pow(vx, 2) + pow(vy, 2) + pow(vz, 2))) >
+        Fx = 0;
+        Fy = 0;
+        Fz = 0;
+    }
+
+
+
+};
+
 // удержание координат частицы в пределах коробки
-double* normalizeCoordinates(double coordinates[3]) {
-    for (int i = 0; i < sizeof(coordinates) / sizeof(coordinates[0]); i++) {
-        while (coordinates[i] >= boxSize) {
-            coordinates[i] -= boxSize;
+Particle normalizeCoordinates(Particle p, double time) {
+    double arr[3] = {p.x, p.y, p.z};
+    double arrp[3] = {p.xp, p.yp, p.zp};
+    for (int i = 0; i < 3; i++) {
+        while (arr[i] >= boxSize) {
+            arr[i] -= boxSize;
+            arrp[i] -= boxSize;
         }
-        while (coordinates[i] < 0) {
-            coordinates[i] += boxSize;
+        while (arr[i] < 0) {
+            arr[i] += boxSize;
+            arrp[i] += boxSize;
         }
     }
-    return coordinates;
+    p.x = arr[0];
+    p.y = arr[1];
+    p.z = arr[2];
+    p.xp = p.x - p.vx * time;
+    p.yp = p.y - p.vy * time;
+    p.zp = p.z - p.vz * time;
+    return p;
 }
 
 // скалярное произведение
@@ -71,44 +133,21 @@ void getParameters() {
 }
 
 
-// класс частиц
-class Particle {
-public:
-    double Fx, Fy, Fz;
-    double vx, vy, vz;
-    double x, y, z;
-    double mass;
 
-    Particle() {
-        mass = 0;
-        Fx = Fy = Fz = vx = vy = vz = x = y = z = 0;
+
+double* calculateMinimalDistance(double relativeCoordinates[3]) {
+    for (int i = 0; i < 3; i++) {
+        if (abs(relativeCoordinates[i]) > boxSize/2) {
+            relativeCoordinates[i] = (boxSize-abs(relativeCoordinates[i])) * (-relativeCoordinates[i]) / abs(relativeCoordinates[i]);
+        }
     }
+    return relativeCoordinates;
 
-    Particle(double coordinates[3], double speed[3], double aMass) {
-        x = coordinates[0];
-        y = coordinates[1];
-        z = coordinates[2];
-        vx = speed[0];
-        vy = speed[1];
-        vz = speed[2];
-        mass = aMass;
-    }
+}
 
-    void move(double time) {
-        vx += Fx * time;
-        vy += Fy * time;
-        vz += Fz * time;
-        x += vx * time;
-        y += vy * time;
-        z += vz * time;
-    }
-
-
-
-};
-
-Particle* createParticles(const int amountOfParticles) {
-    Particle* particles = new Particle[amountOfParticles];
+Particle* createParticles(const int amountOfParticles, Particle* particles) {
+    bool hasEnoughDistance = true;
+    double minimalDistance = 10 * sigma;
     for (int i = 0; i < amountOfParticles; i++) {
         double aCoordinates[3];
         aCoordinates[0] = ((double)rand() / RAND_MAX * boxSize);
@@ -118,22 +157,79 @@ Particle* createParticles(const int amountOfParticles) {
         aSpeed[0] = (-1 + (double)rand() / RAND_MAX * 2);
         aSpeed[1] = (-1 + (double)rand() / RAND_MAX * 2);
         aSpeed[2] = (-1 + (double)rand() / RAND_MAX * 2);
-        particles[i] = Particle(aCoordinates, aSpeed, initialMass);
-    }
-    //cout << particles[amountOfParticles-1].vx << endl;
-    //assert(sizeof(particles)/sizeof(particles[0]) == amountOfParticles);
+        particles[i] = Particle(aCoordinates, aSpeed, initialMass, timeStep);
+        minimalDistance = 10 * sigma;
+        for (int j = 0; j < i; j++) {
+            double relativeCoordinates[3] = {particles[i].x-particles[j].x, particles[i].y-particles[j].y, particles[i].z-particles[j].z};
+            calculateMinimalDistance(relativeCoordinates);
+            double relativeDistance = scalar(relativeCoordinates, relativeCoordinates);
+            minimalDistance = min(minimalDistance, relativeDistance);
+            //delete[] relativeCoordinates;
+            };
+        while (minimalDistance < 1.3 * sigma) {
+            minimalDistance = 10 * sigma;
+            aCoordinates[0] = ((double)rand() / RAND_MAX * boxSize);
+            aCoordinates[1] = (double)rand() / RAND_MAX * boxSize;
+            aCoordinates[2] = (double)rand() / RAND_MAX * boxSize;
+            particles[i] = Particle(aCoordinates, aSpeed, initialMass, timeStep);
+            for (int j = 0; j < i; j++) {
+                double relativeCoordinates[3] = {particles[i].x-particles[j].x, particles[i].y-particles[j].y, particles[i].z-particles[j].z};
+                calculateMinimalDistance(relativeCoordinates);
+                double relativeDistance = scalar(relativeCoordinates, relativeCoordinates);
+                minimalDistance = min(minimalDistance, relativeDistance);
+            };
+            //delete[] aCoordinates;
+
+        };
+
+    };
     return particles;
 }
 
-double* calculateMinimalDistance(double relativeCoordinates[3]) {
-    for (int i = 0; i < 3; i++) {
-        if (abs(relativeCoordinates[i]) > abs(relativeCoordinates[i] - boxSize)) {
-            relativeCoordinates[i] += (-boxSize) * relativeCoordinates[i] / abs(relativeCoordinates[i]);
-        }
-    }
-    return relativeCoordinates;
 
+
+Particle* createParticles(Particle* particles) {
+    assert(amountOfParticles == 64);
+    double x, y, z;
+    double aCoordinates[3];
+    for (int i = 0; i < 64; i++) {
+        x = (double)boxSize / 4 * ((i / (4* 4)) % 4);
+        y = (double)boxSize / 4 * ((i / 4) % 4);
+        z = (double)boxSize / 4 * (i % 4);
+        double aSpeed[3];
+        aSpeed[0] = (-5 + (double)rand() / RAND_MAX * 10);
+        aSpeed[1] = (-5 + (double)rand() / RAND_MAX * 10);
+        aSpeed[2] = (-5 + (double)rand() / RAND_MAX * 10);
+        aCoordinates[0] = x;
+        aCoordinates[1] = y;
+        aCoordinates[2] = z;
+        particles[i] = Particle(aCoordinates, aSpeed, 1.0, timeStep);
+        //delete[] aSpeed;
+        //delete[] aCoordinates;
+    };
+    return particles;
 }
+
+Particle* create2Particles(Particle* particles) {
+    assert(amountOfParticles == 2);
+    double x, y, z;
+    double aCoordinates[3];
+    for (int i = 0; i < 2; i++) {
+        x = 4 + i * 2;
+        y = 1;
+        z = 1;
+        double aSpeed[3];
+        aSpeed[0] = 1 - 2 * i;
+        aSpeed[1] = 0;
+        aSpeed[2] = 0;
+        aCoordinates[0] = x;
+        aCoordinates[1] = y;
+        aCoordinates[2] = z;
+        particles[i] = Particle(aCoordinates, aSpeed, 1.0, timeStep);
+    };
+    return particles;
+}
+
 
 double* calculateForce(Particle P1, Particle P2, double force[3]) {
     double Fx, Fy, Fz;
@@ -146,10 +242,18 @@ double* calculateForce(Particle P1, Particle P2, double force[3]) {
     double relativeDistance = scalar(relativeCoordinates, relativeCoordinates);
     if (relativeDistance > cutOffDistance * cutOffDistance) { return force; }
     double forceAbsolute = epsilon * (48 * pow(sigma, 12) / pow(relativeDistance, 7) - 24 * pow(sigma, 6) / pow(relativeDistance, 4));
-    potentialEnergy += 4 * epsilon * (pow(sigma, 12) / pow(relativeDistance, 6) - pow(sigma, 6) / pow(relativeDistance, 3));
-    force[0] = forceAbsolute * dx;
-    force[1] = forceAbsolute * dy;
-    force[2] = forceAbsolute * dz;
+    potentialEnergy += 4 * epsilon * (pow(sigma, 12) / pow(relativeDistance, 6) - pow(sigma, 6) / pow(relativeDistance, 3)) - zeroPotentialEnergy;
+    force[0] = forceAbsolute * relativeCoordinates[0];
+    force[1] = forceAbsolute * relativeCoordinates[1];
+    force[2] = forceAbsolute * relativeCoordinates[2];
+    if (sqrt(relativeDistance) < 0.9) {
+        cout << P1.x << " " << P1.y << " " << P1.z << endl;
+        cout << P2.x << " " << P2.y << " " << P2.z << endl;
+        cout << relativeCoordinates[0] << " " << relativeCoordinates[1] << " " << relativeCoordinates[2] << endl;
+        cout << force[0] << " " << force[1] << " " << force[02] << endl;
+        cout << sqrt(pow(force[0], 2) + pow(force[1], 2) + pow(force[2], 2)) << endl;
+    }
+    assert(sqrt(pow(force[0], 2) + pow(force[1], 2) + pow(force[2], 2)) < 1000000);
     return force;
 }
 
@@ -180,22 +284,36 @@ void checkExistence(string filepath) {
 }
 
 void writeEnergy(int timer, Particle* particles) {
-    if (timer % 100 != 0) { return; };
+    if (timer % 10 != 0) { return; };
     ofstream fout;
-    string filepath = "./saves/" + filename + "/energy.txt";
-    checkExistence(filepath);
+    string filepath = "./saves/" + filename + "/_energy.txt";
     fout.open(filepath, ios_base::app);
     assert(fout.is_open());
     double K = getKineticEnergy(particles);
-    double U = potentialEnergy / 2.0 * epsilonReal;
+    double U = potentialEnergy * epsilonReal;
     fout << timer << " " << K << " " << U << endl;
+    fout.close();
+}
+
+void writeCoordinates(int timer, Particle* particles) {
+    if (timer % 5 != 0) { return; };
+    ofstream fout;
+    string filepath = "./saves/" + filename + "/" + to_string(timer) + ".txt";
+    checkExistence(filepath);
+    fout.open(filepath);
+    assert(fout.is_open());
+    fout << amountOfParticles << endl;
+    fout << endl;
+    for (int i = 0; i < amountOfParticles; i++) {
+        fout << "Ar " << particles[i].x << " " << particles[i].y << " " << particles[i].z << endl;
+    }
     fout.close();
 }
 
 void writeSpeed(int timer, Particle* particles) {
     if (timer % 100 != 0) { return; };
     ofstream fout;
-    string filepath = "./saves/" + filename + "/speed.txt";
+    string filepath = "./saves/" + filename + "/_speed.txt";
     fout.open(filepath, ios_base::trunc);
     assert(fout.is_open());
     for (int i = 0; i < amountOfParticles; i++) {
@@ -206,14 +324,22 @@ void writeSpeed(int timer, Particle* particles) {
 
 int main()
 {
+    srand(time(0));
     setlocale(LC_ALL, "ru");
     getParameters();
-    Particle* particles = createParticles(amountOfParticles);
+    Particle* particles = new Particle[amountOfParticles];
+    create2Particles(particles);
+    /*double vx, vy, vz, vxp, vyp, vzp;
+    vx = vy = vz = vxp = vyp = vzp = 0.0;
+    for (int i = 0; i < amountOfParticles; i++) {
+        vx += particles[i].vx;
+        vy += particles[i].vy;
+        vz += particles[i].vz;
+    }
+    cout << vx << " " << vy << " " << vz << endl;*/
     int timer = 0;
     while (true) {
         potentialEnergy = 0;
-        writeEnergy(timer, particles);
-        writeSpeed(timer, particles);
         for (int i = 0; i < amountOfParticles; i++) {
             for (int j = i + 1; j < amountOfParticles; j++) {
                 double dForce[3];
@@ -226,13 +352,24 @@ int main()
                 particles[j].Fz -= dForce[2];
             }
         }
+
         for (int i = 0; i < amountOfParticles; i++) {
             particles[i].move(timeStep);
+            particles[i] = normalizeCoordinates(particles[i], timeStep);
         }
-        //writeEnergy(timer, particles);
-        //writeSpeed(timer, particles);
-        return 0;
+        writeEnergy(timer, particles);
+        writeSpeed(timer, particles);
+        writeCoordinates(timer, particles);
         timer++;
+        /*vxp = vyp = vzp = 0.0;
+        for (int i = 0; i < amountOfParticles; i++) {
+            vxp += particles[i].vx;
+            vyp += particles[i].vy;
+            vzp += particles[i].vz;
+        };
+        cout << vxp << " " << vyp << " " << vzp << endl;*/
+        //assert((vxp == vx) && (vyp = vy) && (vzp = vz));
+        if (timer > 10000) { return 0; };
         cout << timer << endl;
     }
 
