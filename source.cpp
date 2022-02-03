@@ -6,6 +6,7 @@
 #include <string>
 #include <string.h>
 #include <ctime>
+#include <direct.h>
 
 //TO DO: redo all the commentaries in english
 
@@ -13,7 +14,7 @@
 using namespace std;
 
 // параметры симул€ции
-double initialTemperature;
+double desiredTemperature;
 int boxSize, amountOfParticles;
 string filename;
 
@@ -26,6 +27,7 @@ const double epsilon = 1;
 const double sigmaReal = 3.4 * pow(10, -10);
 const double initialMassReal = 6.63 * pow(10, -23);
 const double epsilonReal = 1.65 * pow(10, -21);
+const double k_b = 1.38 * pow(10, -23);
 
 
 // параметры программы
@@ -119,15 +121,20 @@ double scalar(double x[3], double y[3]) {
 // измеренные величины
 double potentialEnergy = 0;
 
-void getFilename() {}
+void getFilename() {
+    cout << "Enter name of the save:" << endl;
+    cin >> filename;
+    const char* filepath = ("saves/" + filename).c_str();
+    mkdir(filepath);
+}
 
 void getParameters() {
     getFilename();
-    cout << "¬ведите начальную температуру:" << endl;
-    cin >> initialTemperature;
-    cout << "¬ведите размер коробки: " << endl;
+    cout << "Enter desired temperature:" << endl;
+    cin >> desiredTemperature;
+    cout << "Enter size of a box in sigma units: " << endl;
     cin >> boxSize;
-    cout << "¬ведите количество частиц: " << endl;
+    cout << "Enter amount of particles: " << endl;
     cin >> amountOfParticles;
 }
 
@@ -324,6 +331,8 @@ int main()
     srand(time(0));
     setlocale(LC_ALL, "ru");
     int timer = 0;
+
+    double temperature = 0;
 
     getParameters();
 
