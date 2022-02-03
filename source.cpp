@@ -7,6 +7,7 @@
 #include <string.h>
 #include <ctime>
 #include <direct.h>
+#include <random>
 
 //TO DO: redo all the commentaries in english
 
@@ -18,6 +19,10 @@ double desiredTemperature;
 int boxSize, amountOfParticles;
 string filename;
 
+// random
+random_device rd;
+mt19937 gen(rd());
+
 // физические параметры
 const double sigma = 1;
 const double initialMass = 1;
@@ -25,7 +30,7 @@ const double epsilon = 1;
 // sigma = 3.4 * 10^-10 м; initialMass (для аргона) = 6.63 * 10^-32 кг; epsilon (для аргона) = 1.65 * 10^-21 Дж
 // 1 sqrt(initialMass * epsilon / sigma / sigma) = 2.15 пс (единица времени в программе)
 const double sigmaReal = 3.4 * pow(10, -10);
-const double initialMassReal = 6.63 * pow(10, -23);
+const double initialMassReal = 6.63 * pow(10, -26);
 const double epsilonReal = 1.65 * pow(10, -21);
 const double k_b = 1.38 * pow(10, -23);
 
@@ -34,6 +39,7 @@ const double k_b = 1.38 * pow(10, -23);
 const double timeStep = 0.001; // 2.15 фс
 const double cutOffDistance = sigma * 2.5;
 const double zeroPotentialEnergy = 4 * epsilon * (pow(sigma / cutOffDistance, 12) - pow(sigma / cutOffDistance, 6));
+const double collisionFrequency = 0.5;
 
 // класс частиц
 class Particle {
@@ -125,6 +131,8 @@ void getFilename() {
     cout << "Enter name of the save:" << endl;
     cin >> filename;
     const char* filepath = ("saves/" + filename).c_str();
+    const char* savespath = "saves";
+    mkdir(savespath);
     mkdir(filepath);
 }
 
@@ -250,15 +258,21 @@ double* calculateForce(Particle P1, Particle P2, double force[3]) {
     force[0] = forceAbsolute * relativeCoordinates[0];
     force[1] = forceAbsolute * relativeCoordinates[1];
     force[2] = forceAbsolute * relativeCoordinates[2];
-    if (sqrt(pow(force[0], 2) + pow(force[1], 2) + pow(force[2], 2)) > 55.0) {
-        cout << P1.x << " " << P1.y << " " << P1.z << endl;
-        cout << P2.x << " " << P2.y << " " << P2.z << endl;
-        cout << relativeCoordinates[0] << " " << relativeCoordinates[1] << " " << relativeCoordinates[2] << endl;
-        cout << force[0] << " " << force[1] << " " << force[02] << endl;
-        cout << sqrt(pow(force[0], 2) + pow(force[1], 2) + pow(force[2], 2)) << endl;
-    }
     assert(sqrt(pow(force[0], 2) + pow(force[1], 2) + pow(force[2], 2)) < 1000000);
     return force;
+}
+
+void thermostat(Particle p, double time) {
+    //Implementation of Andersen thermostat
+    double probability = (double) rand() / RAND_MAX;
+    if (probability >= time * collisionFrequency) { return; };
+    std::normal_distribution<double> v_dist(0, sqrt(k_b * desiredTemperature / initialMassReal));
+    double vx = v_dist(gen) / sqrt(epsilonReal / initialMassReal);
+    double vy = v_dist(gen) / sqrt(epsilonReal / initialMassReal);
+    double vz = v_dist(gen) / sqrt(epsilonReal / initialMassReal);
+    p.vx = vx;
+    p.vy = vy;
+    p.vz = vz;
 }
 
 double getKineticEnergy(Particle* particles) {
@@ -328,6 +342,7 @@ void writeSpeed(int timer, Particle* particles) {
 
 int main()
 {
+
     srand(time(0));
     setlocale(LC_ALL, "ru");
     int timer = 0;
@@ -372,6 +387,7 @@ int main()
         for (int i = 0; i < amountOfParticles; i++) {
             particles[i].move(timeStep);
             particles[i] = normalizeCoordinates(particles[i], timeStep);
+            thermostat(particles[i], timeStep);
         }
 
         writeEnergy(timer, particles);
@@ -379,7 +395,7 @@ int main()
         writeCoordinates(timer, particles);
 
         timer++;
-        if (timer > 30000) { return 0; };
+        if (timer > 50000) { return 0; };
         cout << timer << endl;
     }
 

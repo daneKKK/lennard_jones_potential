@@ -31,11 +31,11 @@ print('Синий - сумма энергий \n' +
 
 
 
-#del sumE[0:500]
+del sumE[0:1500]
     
-#print(abs(np.std(sumE)/np.mean(sumE)*100), ' % - относительное отклонение энергии')
+print(abs(np.std(sumE)/np.mean(sumE)*100), ' % - относительное отклонение энергии')
 
-#del sumKE[0:500]
+del sumKE[0:1500]
 
 KE = sum(sumKE)/len(sumKE)/300
 
