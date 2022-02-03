@@ -36,10 +36,10 @@ const double k_b = 1.38 * pow(10, -23);
 
 
 // параметры программы
-const double timeStep = 0.001; // 2.15 фс
+const double timeStep = 0.01; // 2.15 фс
 const double cutOffDistance = sigma * 2.5;
 const double zeroPotentialEnergy = 4 * epsilon * (pow(sigma / cutOffDistance, 12) - pow(sigma / cutOffDistance, 6));
-const double collisionFrequency = 0.5;
+const double collisionFrequency = 1.5;
 
 // класс частиц
 class Particle {
@@ -262,10 +262,10 @@ double* calculateForce(Particle P1, Particle P2, double force[3]) {
     return force;
 }
 
-void thermostat(Particle p, double time) {
+Particle thermostat(Particle p, double time) {
     //Implementation of Andersen thermostat
     double probability = (double) rand() / RAND_MAX;
-    if (probability >= time * collisionFrequency) { return; };
+    if (probability >= time * collisionFrequency) { return p; };
     std::normal_distribution<double> v_dist(0, sqrt(k_b * desiredTemperature / initialMassReal));
     double vx = v_dist(gen) / sqrt(epsilonReal / initialMassReal);
     double vy = v_dist(gen) / sqrt(epsilonReal / initialMassReal);
@@ -273,6 +273,10 @@ void thermostat(Particle p, double time) {
     p.vx = vx;
     p.vy = vy;
     p.vz = vz;
+    p.xp = p.x - vx * time;
+    p.yp = p.y - vy * time;
+    p.zp = p.z - vz * time;
+    return p;
 }
 
 double getKineticEnergy(Particle* particles) {
@@ -387,15 +391,18 @@ int main()
         for (int i = 0; i < amountOfParticles; i++) {
             particles[i].move(timeStep);
             particles[i] = normalizeCoordinates(particles[i], timeStep);
-            thermostat(particles[i], timeStep);
+            if (timer * timeStep < 50) {
+                    particles[i] = thermostat(particles[i], timeStep);
+            }
         }
+
 
         writeEnergy(timer, particles);
         writeSpeed(timer, particles);
         writeCoordinates(timer, particles);
 
         timer++;
-        if (timer > 50000) { return 0; };
+        if (timer > 15000) { return 0; };
         cout << timer << endl;
     }
 
