@@ -40,6 +40,10 @@ const double timeStep = 0.01; // 2.15 фс
 const double cutOffDistance = sigma * 2.5;
 const double zeroPotentialEnergy = 4 * epsilon * (pow(sigma / cutOffDistance, 12) - pow(sigma / cutOffDistance, 6));
 const double collisionFrequency = 1.5;
+const int endTime = 200;
+const double relaxationTimeShare = 0.4;
+const int pressureArraySize = (int)floor(endTime / timeStep * (1 - relaxationTimeShare));
+double pressure[pressureArraySize];
 
 // класс частиц
 class Particle {
@@ -82,9 +86,7 @@ public:
         xp = xt;
         yp = yt;
         zp = zt;
-        Fx = 0;
-        Fy = 0;
-        Fz = 0;
+        Fx = Fy = Fz = 0;
     }
 
 
@@ -289,6 +291,20 @@ double getKineticEnergy(Particle* particles) {
     return K * epsilonReal;
 }
 
+void calculateImmediatePressure(Particle* p, int time) {
+    double virial = 0;
+    double V = pow(boxSize * sigmaReal, 3);
+    double K = getKineticEnergy(p);
+    for (int i = 0; i < amountOfParticles; i++) {
+        double force[3] = {p[i].Fx, p[i].Fy, p[i].Fz};
+        double coords[3] = {p[i].x, p[i].y, p[i].z};
+        virial += scalar(force, coords);
+    }
+    virial *= epsilonReal;
+    pressure[time] = (K + virial) / 3 / V;
+    cout << time << endl;
+}
+
 void checkExistence(string filepath) {
     ifstream fin;
     fin.open(filepath);
@@ -344,9 +360,16 @@ void writeSpeed(int timer, Particle* particles) {
     fout.close();
 }
 
+void writeFinalInformation(Particle* p) {
+    double finalPressure = 0;
+    for (int i = 0; i < pressureArraySize; i++) {
+        finalPressure += pressure[i] / pressureArraySize;
+    }
+    cout << finalPressure << endl;
+}
+
 int main()
 {
-
     srand(time(0));
     setlocale(LC_ALL, "ru");
     int timer = 0;
@@ -388,21 +411,27 @@ int main()
             }
         }
 
+        if (!(timer * timeStep < endTime * relaxationTimeShare)) {
+            calculateImmediatePressure(particles, (timer - int(endTime * relaxationTimeShare / timeStep)));
+        }
+
         for (int i = 0; i < amountOfParticles; i++) {
             particles[i].move(timeStep);
             particles[i] = normalizeCoordinates(particles[i], timeStep);
-            if (timer * timeStep < 50) {
+            if (timer * timeStep < endTime * relaxationTimeShare) {
                     particles[i] = thermostat(particles[i], timeStep);
             }
         }
-
 
         writeEnergy(timer, particles);
         writeSpeed(timer, particles);
         writeCoordinates(timer, particles);
 
         timer++;
-        if (timer > 15000) { return 0; };
+        if (timer * timeStep > endTime) {
+            writeFinalInformation(particles);
+            return 0;
+        };
         cout << timer << endl;
     }
 
