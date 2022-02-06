@@ -354,18 +354,44 @@ void writeSpeed(int timer, Particle* particles) {
     string filepath = "./saves/" + filename + "/_speed.txt";
     fout.open(filepath, ios_base::trunc);
     assert(fout.is_open());
+    double k = sqrt(epsilonReal / initialMassReal);
     for (int i = 0; i < amountOfParticles; i++) {
-        fout << to_string(particles[i].vx) + " " + to_string(particles[i].vy) + " " + to_string(particles[i].vz) << endl;
+        fout << to_string(particles[i].vx * k) + " " + to_string(particles[i].vy * k) + " " + to_string(particles[i].vz * k) << endl;
     }
     fout.close();
 }
 
-void writeFinalInformation(Particle* p) {
+void writeFinalInformation(Particle* p, int timer) {
     double finalPressure = 0;
     for (int i = 0; i < pressureArraySize; i++) {
         finalPressure += pressure[i] / pressureArraySize;
     }
-    cout << finalPressure << endl;
+    ofstream fout;
+    string filepath = "./saves/" + filename + "/_info.txt";
+    fout.open(filepath);
+    assert(fout.is_open());
+    fout << "Save name: " << filename << endl;
+    fout << endl;
+    fout << "Sigma unit in meters: " << sigmaReal << endl;
+    fout << "Particle mass in kilograms: " << initialMassReal << endl;
+    fout << "Epsilon unit in Joule: " << epsilonReal << endl;
+    fout << "Time unit in seconds: " << sigmaReal * sqrt(initialMassReal / epsilonReal) << endl;
+    fout << endl;
+    fout << "Amount of particles: " << amountOfParticles << endl;
+    fout << "Length of a cube box in sigma units: " << boxSize << endl;
+    fout << "Desired temperature in K: " << desiredTemperature << endl;
+    fout << endl;
+    fout << "Pressure in Pa: " << finalPressure << endl;
+    fout << "Temperature as mean kinetic energy (in K): " << getKineticEnergy(p) * 2 / 3 / amountOfParticles / k_b << endl;
+    fout << endl;
+    fout << "Total time steps in simulation:" << endTime / timeStep << endl;
+    fout << "Total time in simulation time units:" << endTime << endl;
+    fout << "Length of one timestep in seconds:" << sigmaReal * sqrt(initialMassReal / epsilonReal) * timeStep << endl;
+    fout << "Total time passed:" << sigmaReal * sqrt(initialMassReal / epsilonReal)* endTime << endl;
+    fout << "Timesteps spent on relaxation: " << endTime * relaxationTimeShare / timeStep << endl;
+    fout << "Time spent on relaxation: " << sigmaReal * sigmaReal * sqrt(initialMassReal / epsilonReal) * endTime * relaxationTimeShare << endl;
+    fout << "Average amount of collisons per time unit with heat bath in relaxation period:" << collisionFrequency << endl;
+    fout.close();
 }
 
 int main()
@@ -423,15 +449,17 @@ int main()
             }
         }
 
+        timer++;
+        if (timer * timeStep > endTime) {
+            cout << getKineticEnergy(particles);
+            writeFinalInformation(particles, timer);
+            return 0;
+        };
+
         writeEnergy(timer, particles);
         writeSpeed(timer, particles);
         writeCoordinates(timer, particles);
 
-        timer++;
-        if (timer * timeStep > endTime) {
-            writeFinalInformation(particles);
-            return 0;
-        };
         cout << timer << endl;
     }
 
