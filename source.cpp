@@ -40,7 +40,7 @@ const double timeStep = 0.001; // 2.15 τρ
 const double cutOffDistance = sigma * 2.5;
 const double zeroPotentialEnergy = 4 * epsilon * (pow(sigma / cutOffDistance, 12) - pow(sigma / cutOffDistance, 6));
 const double collisionFrequency = 1.5;
-const int endTime = 100;
+const int endTime = 40;
 const double relaxationTimeShare = 0.4;
 const int pressureArraySize = (int)floor(endTime / timeStep * (1 - relaxationTimeShare));
 double pressure[pressureArraySize];
@@ -54,6 +54,7 @@ public:
     double xp, yp, zp;
     double xt, yt, zt;
     double mass;
+    double difx, dify, difz;
 
     Particle() {
         mass = 0;
@@ -71,6 +72,7 @@ public:
         yp = coordinates[1] - vy * time;
         zp = coordinates[2] - vz * time;
         mass = aMass;
+        difx = dify = difz = 0;
     }
 
     void move(double time) {
@@ -87,6 +89,9 @@ public:
         yp = yt;
         zp = zt;
         Fx = Fy = Fz = 0;
+        difx += vx * time;
+        dify += vy * time;
+        difz += vz * time;
     }
 
 
@@ -313,7 +318,7 @@ void calculateImmediatePressure(Particle* p, int time) {
         virial += scalar(force, coords);
     }
     virial *= epsilonReal;
-    pressure[time] = (K + virial) / 3 / V;
+    pressure[time] = (2 * K + virial) / 3 / V;
 }
 
 void giveSpeed(Particle* p, double mvInit[3], double timeStep) {
@@ -339,6 +344,8 @@ void giveSpeed(Particle* p, double mvInit[3], double timeStep) {
         p[i].xp = p[i].x - p[i].vx * timeStep;
         p[i].yp = p[i].y - p[i].vy * timeStep;
         p[i].zp = p[i].z - p[i].vz * timeStep;
+
+        p[i].difx = p[i].dify = p[i].difz = 0;
     }
     impulse(p, mvInit);
     cout << mvInit[0] << " " << mvInit[1] << " " << mvInit[2] << endl;
@@ -384,6 +391,38 @@ void writeCoordinates(int timer, Particle* particles) {
     for (int i = 0; i < amountOfParticles; i++) {
         fout << "Ar " << particles[i].x << " " << particles[i].y << " " << particles[i].z << endl;
     }
+    fout.close();
+}
+
+void checkDiffusionFileExistence(string filepath) {
+    ifstream fin;
+    fin.open(filepath);
+    if (fin.is_open()) {
+        return;
+    }
+    else {
+        fin.close();
+        ofstream fout;
+        fout.open(filepath);
+        fout << sigmaReal << " " << sigmaReal * sqrt(initialMassReal / epsilonReal) * timeStep << endl;
+        fout.close();
+    };
+}
+
+void writeDiffusion(int timer, Particle* p) {
+    if (timer % 100 != 0) { return; };
+    ofstream fout;
+    string filepath = "./saves/" + filename + "/_diffusion.txt";
+    checkDiffusionFileExistence(filepath);
+    fout.open(filepath, ios_base::app);
+    assert(fout.is_open());
+    fout << timer << " ";
+    double diffusion = 0;
+    for (int i = 0; i < amountOfParticles; i ++) {
+        diffusion += (pow(p[i].difx, 2) + pow(p[i].dify, 2) + pow(p[i].difz, 2));
+    }
+    diffusion /= amountOfParticles;
+    fout << diffusion << endl;
     fout.close();
 }
 
@@ -498,17 +537,16 @@ int main()
             }
         }
 
+        if (!(timer * timeStep < endTime * relaxationTimeShare)) {
+            calculateImmediatePressure(particles, (timer - int(endTime * relaxationTimeShare / timeStep)));
+        }
+
         for (int i = 0; i < amountOfParticles; i++) {
             particles[i].move(timeStep);
             particles[i] = normalizeCoordinates(particles[i], timeStep);
             if (timer * timeStep < endTime * relaxationTimeShare) {
                     particles[i] = thermostat(particles[i], timeStep);
             }
-        }
-
-        if (timer == 8000) {
-            impulse(particles, mvFin);
-            cout << "Impulse by counting directly: " << mvFin[0] << " " << mvFin[1] << " " << mvFin[2] << endl;
         }
 
         timer++;
@@ -522,19 +560,12 @@ int main()
                 cout << "Nullifying impulse" << endl;
                 giveSpeed(particles, mvInit, timeStep);
                 hasNulledImpulse = true;
-                cout << "Impulse after move: " << mvInit[0] << " " << mvInit[1] << " " << mvInit[2] << endl;
                 impulse(particles, mvFin);
-                cout << "Impulse by counting directly: " << mvFin[0] << " " << mvFin[1] << " " << mvFin[2] << endl;
 
             }
             writeEnergy(timer, particles);
             writeSpeed(timer, particles, mvInit);
-            calculateImmediatePressure(particles, (timer - int(endTime * relaxationTimeShare / timeStep)));
-        }
-
-        if (timer == 8001) {
-            impulse(particles, mvFin);
-            cout << "At 8001: " << mvFin[0] << " " << mvFin[1] << " " << mvFin[2] << endl;
+            writeDiffusion(timer, particles);
         }
 
         writeCoordinates(timer, particles);
