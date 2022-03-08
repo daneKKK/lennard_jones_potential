@@ -36,11 +36,11 @@ const double k_b = 1.38 * pow(10, -23);
 
 
 // ןאנאלוענû ןנמדנאללû
-const double timeStep = 0.01; // 2.15 פס
+const double timeStep = 0.001; // 2.15 פס
 const double cutOffDistance = sigma * 2.5;
 const double zeroPotentialEnergy = 4 * epsilon * (pow(sigma / cutOffDistance, 12) - pow(sigma / cutOffDistance, 6));
 const double collisionFrequency = 1.5;
-const int endTime = 200;
+const int endTime = 100;
 const double relaxationTimeShare = 0.4;
 const int pressureArraySize = (int)floor(endTime / timeStep * (1 - relaxationTimeShare));
 double pressure[pressureArraySize];
@@ -281,6 +281,18 @@ Particle thermostat(Particle p, double time) {
     return p;
 }
 
+double* impulse(Particle* p, double mv[3]) {
+    mv[0] = 0;
+    mv[1] = 0;
+    mv[2] = 0;
+    for (int i = 0; i < amountOfParticles; i++) {
+        mv[0] += p[i].vx;
+        mv[1] += p[i].vy;
+        mv[2] += p[i].vz;
+    }
+    return mv;
+}
+
 double getKineticEnergy(Particle* particles) {
     double K = 0;
     for (int i = 0; i < amountOfParticles; i++) {
@@ -302,7 +314,34 @@ void calculateImmediatePressure(Particle* p, int time) {
     }
     virial *= epsilonReal;
     pressure[time] = (K + virial) / 3 / V;
-    cout << time << endl;
+}
+
+void giveSpeed(Particle* p, double mvInit[3], double timeStep) {
+    std::normal_distribution<double> v_dist(0, sqrt(k_b * desiredTemperature / initialMassReal));
+    double vx, vy, vz;
+    vx = vy = vz = 0;
+    for (int i = 0; i < amountOfParticles; i++) {
+        p[i].vx = v_dist(gen) / sqrt(epsilonReal / initialMassReal);;
+        p[i].vy = v_dist(gen) / sqrt(epsilonReal / initialMassReal);;
+        p[i].vz = v_dist(gen) / sqrt(epsilonReal / initialMassReal);;
+    }
+    impulse(p, mvInit);
+    double temperature = getKineticEnergy(p) * 2 / 3 / amountOfParticles / k_b;
+    for (int i = 0; i < amountOfParticles; i++) {
+        p[i].vx -= mvInit[0] / amountOfParticles;
+        p[i].vy -= mvInit[1] / amountOfParticles;
+        p[i].vz -= mvInit[2] / amountOfParticles;
+
+        /*p[i].vx *= sqrt(desiredTemperature / temperature);
+        p[i].vx *= sqrt(desiredTemperature / temperature);
+        p[i].vx *= sqrt(desiredTemperature / temperature);*/
+
+        p[i].xp = p[i].x - p[i].vx * timeStep;
+        p[i].yp = p[i].y - p[i].vy * timeStep;
+        p[i].zp = p[i].z - p[i].vz * timeStep;
+    }
+    impulse(p, mvInit);
+    cout << mvInit[0] << " " << mvInit[1] << " " << mvInit[2] << endl;
 }
 
 void checkExistence(string filepath) {
@@ -348,8 +387,8 @@ void writeCoordinates(int timer, Particle* particles) {
     fout.close();
 }
 
-void writeSpeed(int timer, Particle* particles) {
-    if (timer % 100 != 0) { return; };
+void writeSpeed(int timer, Particle* particles, double mvInit[3]) {
+    if (timer % 50 != 0) { return; };
     ofstream fout;
     string filepath = "./saves/" + filename + "/_speed.txt";
     fout.open(filepath, ios_base::trunc);
@@ -359,10 +398,26 @@ void writeSpeed(int timer, Particle* particles) {
         fout << to_string(particles[i].vx * k) + " " + to_string(particles[i].vy * k) + " " + to_string(particles[i].vz * k) << endl;
     }
     fout.close();
+
+    string absFilepath = "./saves/" + filename + "/_speedAbs.txt";
+    fout.open(absFilepath, ios_base::app);
+    assert(fout.is_open());
+    double absSpeed;
+    for (int i = 0; i < amountOfParticles; i++) {
+        absSpeed = sqrt(pow(particles[i].vx*k, 2) + pow(particles[i].vy*k, 2) + pow(particles[i].vz*k, 2));
+        fout << absSpeed;
+        if (i < amountOfParticles-1) {
+            fout << " ";
+        }
+    }
+    fout << endl;
+    fout.close();
 }
 
-void writeFinalInformation(Particle* p, int timer) {
+void writeFinalInformation(Particle* p, int timer, double mvInit[3]) {
     double finalPressure = 0;
+    double mvFin[3];
+    impulse(p, mvFin);
     for (int i = 0; i < pressureArraySize; i++) {
         finalPressure += pressure[i] / pressureArraySize;
     }
@@ -383,13 +438,15 @@ void writeFinalInformation(Particle* p, int timer) {
     fout << endl;
     fout << "Pressure in Pa: " << finalPressure << endl;
     fout << "Temperature as mean kinetic energy (in K): " << getKineticEnergy(p) * 2 / 3 / amountOfParticles / k_b << endl;
+    fout << "Initial system impulse in reduced units: " << mvInit[0] << " " << mvInit[1] << " " << mvInit[2] << endl;
+    fout << "Final system impulse in reduced units: " << mvFin[0] << " " << mvFin[1] << " " << mvFin[2] << endl;
     fout << endl;
     fout << "Total time steps in simulation:" << endTime / timeStep << endl;
     fout << "Total time in simulation time units:" << endTime << endl;
     fout << "Length of one timestep in seconds:" << sigmaReal * sqrt(initialMassReal / epsilonReal) * timeStep << endl;
     fout << "Total time passed:" << sigmaReal * sqrt(initialMassReal / epsilonReal)* endTime << endl;
     fout << "Timesteps spent on relaxation: " << endTime * relaxationTimeShare / timeStep << endl;
-    fout << "Time spent on relaxation: " << sigmaReal * sigmaReal * sqrt(initialMassReal / epsilonReal) * endTime * relaxationTimeShare << endl;
+    fout << "Time spent on relaxation: " << sigmaReal * sqrt(initialMassReal / epsilonReal) * endTime * relaxationTimeShare << endl;
     fout << "Average amount of collisons per time unit with heat bath in relaxation period:" << collisionFrequency << endl;
     fout.close();
 }
@@ -401,11 +458,15 @@ int main()
     int timer = 0;
 
     double temperature = 0;
+    double mvInit[3];
+    double mvFin[3];
 
     getParameters();
 
     Particle* particles = new Particle[amountOfParticles];
     createParticles(amountOfParticles, particles);
+
+    bool hasNulledImpulse = false;
 
     double vx, vy, vz;
     vx = vy = vz = 0.0;
@@ -437,10 +498,6 @@ int main()
             }
         }
 
-        if (!(timer * timeStep < endTime * relaxationTimeShare)) {
-            calculateImmediatePressure(particles, (timer - int(endTime * relaxationTimeShare / timeStep)));
-        }
-
         for (int i = 0; i < amountOfParticles; i++) {
             particles[i].move(timeStep);
             particles[i] = normalizeCoordinates(particles[i], timeStep);
@@ -449,15 +506,37 @@ int main()
             }
         }
 
+        if (timer == 8000) {
+            impulse(particles, mvFin);
+            cout << "Impulse by counting directly: " << mvFin[0] << " " << mvFin[1] << " " << mvFin[2] << endl;
+        }
+
         timer++;
         if (timer * timeStep > endTime) {
-            cout << getKineticEnergy(particles);
-            writeFinalInformation(particles, timer);
+            writeFinalInformation(particles, timer, mvInit);
             return 0;
         };
 
-        writeEnergy(timer, particles);
-        writeSpeed(timer, particles);
+        if (!(timer * timeStep < endTime * relaxationTimeShare)) {
+            if (!hasNulledImpulse) {
+                cout << "Nullifying impulse" << endl;
+                giveSpeed(particles, mvInit, timeStep);
+                hasNulledImpulse = true;
+                cout << "Impulse after move: " << mvInit[0] << " " << mvInit[1] << " " << mvInit[2] << endl;
+                impulse(particles, mvFin);
+                cout << "Impulse by counting directly: " << mvFin[0] << " " << mvFin[1] << " " << mvFin[2] << endl;
+
+            }
+            writeEnergy(timer, particles);
+            writeSpeed(timer, particles, mvInit);
+            calculateImmediatePressure(particles, (timer - int(endTime * relaxationTimeShare / timeStep)));
+        }
+
+        if (timer == 8001) {
+            impulse(particles, mvFin);
+            cout << "At 8001: " << mvFin[0] << " " << mvFin[1] << " " << mvFin[2] << endl;
+        }
+
         writeCoordinates(timer, particles);
 
         cout << timer << endl;
