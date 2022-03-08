@@ -1,3 +1,4 @@
+
 #include <iostream>
 #include <algorithm>
 #include <cmath>
@@ -40,7 +41,7 @@ const double timeStep = 0.001; // 2.15 τρ
 const double cutOffDistance = sigma * 2.5;
 const double zeroPotentialEnergy = 4 * epsilon * (pow(sigma / cutOffDistance, 12) - pow(sigma / cutOffDistance, 6));
 const double collisionFrequency = 1.5;
-const int endTime = 40;
+const int endTime = 100;
 const double relaxationTimeShare = 0.4;
 const int pressureArraySize = (int)floor(endTime / timeStep * (1 - relaxationTimeShare));
 double pressure[pressureArraySize];
@@ -311,6 +312,8 @@ double getKineticEnergy(Particle* particles) {
 void calculateImmediatePressure(Particle* p, int time) {
     double virial = 0;
     double V = pow(boxSize * sigmaReal, 3);
+    //double pi = acos(-1);
+    //double p_tail = 16 / 3 * pi * pow((initialMassReal * amountOfParticles / V), 2) * (2 / 3 * pow((1 / cutOffDistance * sigmaReal),9) - pow((1 / cutOffDistance * sigmaReal),3));
     double K = getKineticEnergy(p);
     for (int i = 0; i < amountOfParticles; i++) {
         double force[3] = {p[i].Fx, p[i].Fy, p[i].Fz};
@@ -318,6 +321,11 @@ void calculateImmediatePressure(Particle* p, int time) {
         virial += scalar(force, coords);
     }
     virial *= epsilonReal;
+    /*cout << virial << endl;
+    cout << K * 2 << endl;
+    cout << (2 * K + virial) / 3 / V << endl;
+    cout << (2 * K) / 3 / V << endl;*/
+    //cout << p_tail << endl;
     pressure[time] = (2 * K + virial) / 3 / V;
 }
 

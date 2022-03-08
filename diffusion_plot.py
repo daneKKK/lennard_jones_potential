@@ -22,11 +22,11 @@ for line in f:
     t0, r0 = line.split()
     if len(t) >= 1:
         t += [float(t0) * timeUnit - t[0]]
-        r += [float(r0) * distUnit]
+        r += [float(r0) * distUnit * distUnit]
     else:
         print(t0)
         t += [float(t0) * timeUnit]
-        r += [float(r0) * distUnit]
+        r += [float(r0) * distUnit * distUnit]
 
 t[0] = 0
 
